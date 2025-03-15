@@ -11,9 +11,10 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 
 ## 🚀 Execução
 ```bash
-# Clonar repositório
-git clone https://github.com/wesdataharmony/med-eng.git
-# Ir para a pasta raiz do projeto EXE:
+# Clonar repositório crie uma pasta com o nome "med-dashoard" e dentro da mesma CLONE o projeto.
+git clone https://github.com/wesdataharmony/med-dashboard.git
+
+# Ir para na pasta "med-dashoard" raiz do projeto EXE:
 cd C:\Users\Desktop\med-dashoard
 
 # Criar ambiente Virtual
