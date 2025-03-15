@@ -12,7 +12,7 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 ## 🚀 Execução
 ```bash
 # Clonar repositório
-git clone https://github.com/wesdataharmony/med-dashboard.git
+git clone https://github.com/wesdataharmony/med-eng.git
 # Ir para a pasta raiz do projeto EXE:
 cd C:\Users\Desktop\med-dashoard
 
