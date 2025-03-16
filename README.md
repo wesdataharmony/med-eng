@@ -4,6 +4,9 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 ## 📋 Funcionalidades
 - Download automático de dados do GitHub
 - ETL otimizado com SQLite
+ - Processa 1.180 arquivos FHIR
+ - Cria estrutura relacional otimizada para consultas
+
 - Dashboard interativo com:
   - Top 10 condições médicas
   - Top 10 medicamentos prescritos
