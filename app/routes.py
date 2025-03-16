@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template, send_file # type: ignore
 import psycopg2
 import sqlite3
@@ -8,7 +9,9 @@ import numpy as np
 from io import BytesIO
 from config.settings import DB_CONFIG_SQLITE
 
-app = Flask(__name__)
+app = Flask(__name__, 
+           static_folder=os.path.join(os.path.dirname(__file__), 'static'),
+           template_folder=os.path.join(os.path.dirname(__file__), 'templates'))
 
 def get_db_connection():
     conn = sqlite3.connect(DB_CONFIG_SQLITE['database'])
@@ -107,7 +110,7 @@ def dashboard():
         LIMIT 10
     ''').fetchall()
 
-    # Estatísticas de gênero
+    # Estatísticas de sexos
     gender_stats = conn.execute('''
         SELECT 
             SUM(CASE WHEN gender = 'male' THEN 1 ELSE 0 END) as male,
@@ -211,5 +214,6 @@ def plot_pie(type, value):
 
     return send_file(img_buffer, mimetype='image/png')
 
+
 if __name__ == '__main__':
-    app.run(debug=True) 
+    app.run(host='0.0.0.0', port=5000, debug=True)
