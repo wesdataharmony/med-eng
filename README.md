@@ -12,7 +12,7 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 ## 🚀 Execução
 ```bash
 # Clonar repositório crie uma pasta com o nome "med-dashoard" e dentro da mesma CLONE o projeto.
-git clone https://github.com/wesdataharmony/med-dashboard.git
+git clone https://github.com/wesdataharmony/med-eng.git
 
 # Ir para na pasta "med-dashoard" raiz do projeto EXE:
 cd C:\Users\Desktop\med-dashoard
@@ -33,5 +33,11 @@ python -m etl.loader
 python -m app.routes
 
 # Limpe o ambiente
-rm -Force -Recurse .\data\
+## Get-ChildItem -Path .\data\ -File: Lista todos os arquivos dentro da pasta data (mas não remove subpastas).
+## | Remove-Item -Force: Remove os arquivos listados dentro da pasta "data".
+
+### Remove os arquivos
+Get-ChildItem -Path .\data\ -File | Remove-Item -Force
+
+#Esse comando apaga o arquivo medicaldatabase.db do seu projeto, sem remover nenhuma pasta.
 rm -Force .\medicaldatabase.db
