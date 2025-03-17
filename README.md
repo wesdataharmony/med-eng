@@ -14,20 +14,24 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 
 ## 🚀 Execução
 ```bash
-# Clonar repositório crie uma pasta com o nome "med-dashoard" e dentro da mesma CLONE o projeto.
+# Clonar repositório, o projeto med-eng.
 git clone https://github.com/wesdataharmony/med-eng.git
 
-# Ir para na pasta "med-dashoard" raiz do projeto EXE:
-cd C:\Users\Desktop\med-dashoard
+# Ir para a pasta "med-eng" raiz do projeto EXE:
+
+  cd C:\Users\Desktop\med-eng
+Exe: C:\Users\Desktop\med-eng> 
 
 # Criar ambiente Virtual
+
 python -m venv venv
 .\venv\Scripts\Activate
-
-# pip freeze > requirements.txt para criar todos as dependencias do projeto
+Exe:(venv) PS C:\Users\Desktop\med-eng>
 
 # Instalar dependências
 pip install -r requirements.txt
+
+# CASO NECESSITE excutar: pip freeze > requirements.txt para criar todos as dependencias do projeto.
 
 # Executar pipeline de dados
 python -m etl.loader
