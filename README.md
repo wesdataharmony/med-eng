@@ -38,11 +38,8 @@ python -m etl.loader
 python -m app.routes
 
 # Limpe o ambiente
-## Get-ChildItem -Path .\data\ -File: Lista todos os arquivos dentro da pasta data (mas não remove subpastas).
-## | Remove-Item -Force: Remove os arquivos listados dentro da pasta "data".
+### Remove os arquivos - Remove a pasta "data".
+Remove-Item -Path .\data\ -Recurse -Force
 
-### Remove os arquivos
-Get-ChildItem -Path .\data\ -File | Remove-Item -Force
-
-#Esse comando apaga o arquivo medicaldatabase.db do seu projeto, sem remover nenhuma pasta.
+### Remove o banco "medicaldatabase".
 rm -Force .\medicaldatabase.db
