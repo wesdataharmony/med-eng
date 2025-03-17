@@ -1,6 +1,8 @@
 # Medical Dashboard - FHIR Data Analysis
 Solução para processamento e visualização de dados médicos no padrão FHIR
 
+## ⚠️ Arquivo "docker-compose.yml" não implementado
+
 ## 📋 Funcionalidades
 - Download automático de dados do GitHub
 - ETL otimizado com SQLite
