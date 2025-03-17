@@ -17,23 +17,21 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 # Clonar repositório, o projeto med-eng.
 git clone https://github.com/wesdataharmony/med-eng.git
 
-# Ir para a pasta "med-eng" raiz do projeto EXE:
-
+##Ir para a pasta "med-eng" raiz do projeto EXE:
   cd C:\Users\Desktop\med-eng
 Exe: C:\Users\Desktop\med-eng> 
 
-# Criar ambiente Virtual
-
+## Criar ambiente Virtual
 python -m venv venv
 .\venv\Scripts\Activate
 Exe:(venv) PS C:\Users\Desktop\med-eng>
 
-# Instalar dependências
+## Instalar dependências
 pip install -r requirements.txt
 
 # CASO NECESSITE excutar: pip freeze > requirements.txt para criar todos as dependencias do projeto.
 
-# Executar pipeline de dados
+## Executar pipeline de dados
 python -m etl.loader
 
 # Iniciar aplicação web
