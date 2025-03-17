@@ -114,8 +114,7 @@ def dashboard():
     gender_stats = conn.execute('''
         SELECT 
             SUM(CASE WHEN gender = 'male' THEN 1 ELSE 0 END) as male,
-            SUM(CASE WHEN gender = 'female' THEN 1 ELSE 0 END) as female,
-            SUM(CASE WHEN gender NOT IN ('male', 'female') THEN 1 ELSE 0 END) as other
+            SUM(CASE WHEN gender = 'female' THEN 1 ELSE 0 END) as female
         FROM patients
     ''').fetchone()
 
@@ -125,8 +124,7 @@ def dashboard():
                          conditions=top_conditions,
                          medications=top_meds,
                          male_count=gender_stats['male'],
-                         female_count=gender_stats['female'],
-                         other_gender_count=gender_stats['other'])
+                         female_count=gender_stats['female'])
 
 @app.route('/plot/conditions')
 def plot_conditions():
