@@ -32,17 +32,25 @@
 Download e ETL: Os dados são baixados e processados pelo loader.py, que os organiza e insere no banco SQLite.
           |
           v
+		  
+		  
 [ Download e ETL - loader.py ]
 Armazenamento: O SQLite armazena os dados em tabelas otimizadas.
           |
           v
+		  
+		  
 [ Banco SQLite - meddatabase.db ]
           |
           v
+		  
+		  
 [ Backend Flask - routes.py ]
 Backend: O Flask consulta o banco e gera gráficos dinâmicos usando Matplotlib.
           |
           v
+		  
+		  
 [ Dashboard Web - dashboard.html ]
 Frontend: O dashboard exibe os resultados em listas e gráficos interativos.
 
