@@ -36,6 +36,9 @@ pip install -r requirements.txt
 ## Executar pipeline de dados
 python -m etl.loader
 
+## Executar pipeline de dados com a função de migração para o Postgres.
+python -m etl.loader_pipeline.py
+
 # Iniciar aplicação web
 python -m app.routes
 
