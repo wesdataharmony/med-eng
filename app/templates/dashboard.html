@@ -2,24 +2,42 @@
 <html>
 <head>
     <title>Dashboard Médico</title>
+    <!-- Incluir Chart.js via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             margin: 20px;
             font-family: Arial, sans-serif;
         }
-        /* Container principal: grid com 3 colunas */
         .dashboard-container {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
             gap: 10px;
         }
-        /* Cada coluna organiza seus itens em duas linhas */
         .column {
             display: flex;
             flex-direction: column;
             gap: 20px;
         }
-        /* Cartões de listas e gráficos */
+        .chart-container {
+            transition: transform 0.2s;
+            background: #ffffff;
+            border: 1px solid #e0e0e0;
+        }
+        .chart-container:hover {
+            transform: translateY(-3px);
+        }
+        .list-card li {
+            transition: all 0.2s;
+            position: relative;
+        }
+        .list-card li:hover {
+            transform: translateX(5px);
+            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+        }
+        canvas {
+            max-height: 300px;
+        }
         .list-card, .chart-container {
             background: #f8f9fa;
             padding: 15px;
@@ -33,6 +51,10 @@
         .chart-container {
             text-align: center;
             min-height: 350px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         h2 {
             margin-bottom: 10px;
@@ -63,14 +85,25 @@
             border-radius: 4px;
             font-size: 0.9em;
         }
-        img {
+        canvas {
+            max-width: 100%;
             height: auto;
-            max-height: 316px;
-            object-fit: contain;
         }
         .loader {
             font-style: italic;
             color: #666;
+        }
+        .error {
+            color: #dc3545;
+            padding: 15px;
+            text-align: center;
+        }
+        .chart-container {
+            min-height: 400px;  /* Aumente este valor se o título ainda estiver oculto */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
         @media (max-width: 1200px) {
             .dashboard-container {
@@ -83,7 +116,6 @@
     <div class="dashboard-container">
         <!-- Coluna Esquerda: Condições -->
         <div class="column">
-            <!-- Lista de Condições -->
             <div class="list-card">
                 <h2>Top 10 Condições Médicas</h2>
                 <ul id="conditions-list">
@@ -94,109 +126,226 @@
                     {% endfor %}
                 </ul>
             </div>
-            <!-- Gráfico de Barras para Condições -->
             <div class="chart-container">
-                <img src="{{ url_for('plot_conditions') }}" alt="Gráfico de Barras - Condições">
+                <canvas id="conditionsChart"></canvas>
             </div>
         </div>
-                <!-- Coluna Direita: Medicamentos -->
-                <div class="column">
-                    <!-- Lista de Medicamentos -->
-                    <div class="list-card">
-                        <h2>Top 10 Medicamentos</h2>
-                        <ul id="medications-list">
-                            {% for item in medications %}
-                            <li data-type="medication" data-value="{{ item.medication_text }}">
-                                {{ item.medication_text }} ({{ item.count }})
-                            </li>
-                            {% endfor %}
-                        </ul>
-                    </div>
-                    <!-- Gráfico de Barras para Medicamentos -->
-                    <div class="chart-container">
-                        <img src="{{ url_for('plot_medications') }}" alt="Gráfico de Barras - Medicamentos">
-                    </div>
-                </div>
-
+        <!-- Coluna Direita: Medicamentos -->
+        <div class="column">
+            <div class="list-card">
+                <h2>Top 10 Medicamentos</h2>
+                <ul id="medications-list">
+                    {% for item in medications %}
+                    <li data-type="medication" data-value="{{ item.medication_text }}">
+                        {{ item.medication_text }} ({{ item.count }})
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="chart-container">
+                <canvas id="medicationsChart"></canvas>
+            </div>
+        </div>
         <!-- Coluna Central: Gráfico de Pizza + Estatísticas -->
         <div class="column">
-            <!-- Gráfico de Pizza Interativo -->
             <div class="chart-container" id="pieChart">
                 <h3 id="pieTitle">Selecione um item da lista condição ou medicamento</h3>
-                <!-- O gráfico de pizza será injetado aqui -->
             </div>
-                    <!-- Estatísticas de Pacientes -->
-        <div class="list-card">
-            <div class="column">
-                <h2>Estatísticas de Pacientes</h2>
-                <div class="stats-item">Masculino: {{ male_count }}</div>
-                <div class="stats-item">Feminino: {{ female_count }}</div>
+            <div class="list-card">
+                <div class="column">
+                    <h2>Estatísticas de Pacientes</h2>
+                    <div class="stats-item">Masculino: {{ male_count }}</div>
+                    <div class="stats-item">Feminino: {{ female_count }}</div>
+                </div>
             </div>
-        </div>
         </div>
     </div>
 
-    <!-- Script para atualizar o gráfico de pizza sem recarregar a página -->
+    <!-- Script para renderizar os gráficos -->
     <script>
-document.addEventListener('DOMContentLoaded', function() {
-    function handleItemClick(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        const li = event.target.closest('li');
-        if (li) {
-            const type = li.getAttribute('data-type');  
-            const value = li.getAttribute('data-value');
-            updatePieChart(type, value);
-        }
-    }
+        document.addEventListener('DOMContentLoaded', function() {
+            // Dados para os gráficos de barras
+            const conditionsData = JSON.parse('{{ conditions | tojson | safe }}');
+            const medicationsData = JSON.parse('{{ medications | tojson | safe }}');
 
-    // Capturar cliques nas listas de condições e medicamentos
-    document.getElementById('conditions-list').addEventListener('click', handleItemClick);
-    document.getElementById('medications-list').addEventListener('click', handleItemClick);
+            // Gráfico de Condições Médicas
+            const ctxConditions = document.getElementById('conditionsChart').getContext('2d');
+            new Chart(ctxConditions, {
+                type: 'bar',
+                data: {
+                    labels: conditionsData.map(i => i.condition_text),
+                    datasets: [{
+                        data: conditionsData.map(i => i.count),
+                        backgroundColor: 'rgba(94, 114, 228, 0.8)',
+                        borderColor: 'rgba(94, 114, 228, 1)',
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        hoverBackgroundColor: 'rgba(94, 114, 228, 1)'
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        title: { 
+                            display: true,
+                            text: 'Top 10 Condições Médicas',
+                            font: { size: 16 }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        y: { 
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
 
-    // Capturar clique no gráfico de barras (Top 10 Condições Médicas)
-    document.getElementById('barChartConditions').addEventListener('click', function() {
-        updatePieChart('condition', 'Top 10 Condições Médicas');
-    });
+            // Gráfico de Medicamentos
+            const ctxMedications = document.getElementById('medicationsChart').getContext('2d');
+            new Chart(ctxMedications, {
+                type: 'bar',
+                data: {
+                    labels: medicationsData.map(i => i.medication_text),
+                    datasets: [{
+                        label: 'Número de Prescrições',
+                        data: medicationsData.map(i => i.count),
+                        backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',  // Gráfico de barras horizontal
+                    responsive: true,
+                    maintainAspectRatio: false,  // Permite que o gráfico ajuste sua altura
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Top 10 Medicamentos Prescritos',
+                            font: { size: 20 },
+                            padding: { top: 20, bottom: 20 }  // Aumenta o espaço acima e abaixo do título
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Número de Prescrições',
+                                font: { size: 16 }
+                            },
+                            ticks: { font: { size: 14 } }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                //text: 'Medicamentos',
+                                font: { size: 16 }
+                            },
+                            ticks: {
+                                font: { size: 12 },
+                                autoSkip: false
+                            }
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            left: 10,
+                            right: 10,
+                            top: 30,  // Aumenta o espaço no topo para o título
+                            bottom: 10
+                        }
+                    }
+                }
+            });
 
-    function updatePieChart(type, value) {
-        const pieContainer = document.getElementById('pieChart');
-        pieContainer.innerHTML = "";
+            // Variável para o gráfico de pizza
+            let pieChart = null;
+            function updatePieChart(type, value) {
+                const pieContainer = document.getElementById('pieChart');
+                pieContainer.innerHTML = '<div class="loader">Carregando gráfico...</div>';
 
-        const pieTitle = document.createElement('h3');
-        pieTitle.id = 'pieTitle';
-        pieTitle.textContent = `${type === 'condition' ? 'Condição' : 'Medicamento'} ${value}`;
-        pieContainer.appendChild(pieTitle);
+                fetch(`/data/pie/${type}/${encodeURIComponent(value)}`)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (pieChart) pieChart.destroy();
+                        pieContainer.innerHTML = '<canvas id="pieChartCanvas"></canvas>';
+                        const ctx = document.getElementById('pieChartCanvas').getContext('2d');
+                        pieChart = new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: data.labels,
+                                datasets: [{
+                                    data: data.counts,
+                                    backgroundColor: [
+                                        '#4e79a7', '#f28e2c', '#e15759', '#76b7b2',
+                                        '#59a14f', '#edc948', '#b07aa1', '#ff9da7'
+                                    ],
+                                    hoverOffset: 20
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: {
+                                    title: {
+                                        display: true,
+                                        text: `${value}`,
+                                        font: { size: 16 }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: (context) => {
+                                                const total = context.dataset.data.reduce((a, b) => a + b);
+                                                const percentage = ((context.raw / total) * 100).toFixed(1);
+                                                return `${context.label}: ${percentage}% (${context.raw})`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    })
+                    .catch(error => {
+                        console.error('Erro:', error);
+                        pieContainer.innerHTML = `<div class="error">Erro ao carregar dados: ${error.message}</div>`;
+                    });
+            }
 
-        const loader = document.createElement('div');
-        loader.className = 'loader';
-        loader.textContent = 'Carregando gráfico...';
-        pieContainer.appendChild(loader);
+            // Event listeners para as listas
+            document.getElementById('conditions-list').addEventListener('click', function(event) {
+                const li = event.target.closest('li');
+                if (li) {
+                    const type = li.getAttribute('data-type');
+                    const value = li.getAttribute('data-value');
+                    updatePieChart(type, value);
+                }
+            });
 
-        const timestamp = new Date().getTime();
-        const encodedValue = encodeURIComponent(value);
-        const imgSrc = `/plot/pie/${type}/${encodedValue}?t=${timestamp}`;
-
-        const img = document.createElement('img');
-        img.src = imgSrc;
-        img.alt = 'Distribuição por Gênero';
-        img.style.maxHeight = '300px';
-        img.style.display = 'none';
-
-        img.addEventListener('load', function() {
-            loader.remove();
-            img.style.display = 'block';
+            document.getElementById('medications-list').addEventListener('click', function(event) {
+                const li = event.target.closest('li');
+                if (li) {
+                    const type = li.getAttribute('data-type');
+                    const value = li.getAttribute('data-value');
+                    updatePieChart(type, value);
+                }
+            });
         });
-
-        img.addEventListener('error', function() {
-            loader.remove();
-            pieTitle.textContent = 'Erro ao carregar o gráfico';
-        });
-
-        pieContainer.appendChild(img);
-    }
-});
-
     </script>
 </body>
 </html>
