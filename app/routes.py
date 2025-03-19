@@ -1,5 +1,7 @@
 import os
-from flask import Flask, render_template, send_file # type: ignore
+import sys 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from flask import Flask, jsonify, render_template, send_file # type: ignore
 import psycopg2
 import sqlite3
 import matplotlib # type: ignore
@@ -55,7 +57,7 @@ def generate_pie_chart(condition):
         GROUP BY gender
     ''', (condition,)).fetchall()
     conn.close()
-
+    
     labels = [row['gender'] for row in data]
     sizes = [row['count'] for row in data]
 
@@ -93,7 +95,7 @@ def generate_pie_chart(condition):
 def dashboard():
     conn = get_db_connection()
     
-    # Dados para listas
+    # Dados para listas e gráficos de barras
     top_conditions = conn.execute('''
         SELECT condition_text, COUNT(*) as count 
         FROM conditions 
@@ -114,11 +116,17 @@ def dashboard():
     gender_stats = conn.execute('''
         SELECT 
             SUM(CASE WHEN gender = 'male' THEN 1 ELSE 0 END) as male,
-            SUM(CASE WHEN gender = 'female' THEN 1 ELSE 0 END) as female
+            SUM(CASE WHEN gender = 'female' THEN 1 ELSE 0 END) as female,
+            SUM(CASE WHEN gender NOT IN ('male', 'female') THEN 1 ELSE 0 END) as other
         FROM patients
     ''').fetchone()
 
     conn.close()
+    
+    # Converter os objetos Row em dicionários
+    top_conditions = [dict(row) for row in top_conditions]
+    top_meds = [dict(row) for row in top_meds]
+    gender_stats = dict(gender_stats)
     
     return render_template('dashboard.html', 
                          conditions=top_conditions,
@@ -166,52 +174,42 @@ def plot_medications():
     img = generate_bar_chart(chart_data, 'Top 10 Medicamentos Prescritos')  # 2 argumentos
     return send_file(img, mimetype='image/png')
 
-@app.route('/plot/pie/<type>/<value>')
-def plot_pie(type, value):
-    conn = get_db_connection()  # Função que conecta ao banco de dados
-    if type == 'condition':
-        data = conn.execute('''
-            SELECT gender, COUNT(*) as count 
-            FROM patients 
-            WHERE patient_id IN (
-                SELECT patient_id FROM conditions WHERE condition_text = ?
-            )
-            GROUP BY gender
-        ''', (value,)).fetchall()
-        title = f'Distribuição por Gênero: Condição {value[:30]}...'
-    elif type == 'medication':
-        data = conn.execute('''
-            SELECT gender, COUNT(*) as count 
-            FROM patients 
-            WHERE patient_id IN (
-                SELECT patient_id FROM medications WHERE medication_text = ?
-            )
-            GROUP BY gender
-        ''', (value,)).fetchall()
-        title = f'Distribuição por Gênero: Medicamento {value[:30]}...'
-    else:
-        return "Tipo inválido", 400
-    conn.close()
-
-    labels = [row['gender'] for row in data]
-    sizes = [row['count'] for row in data]
-
-    # Geração do gráfico de pizza
-    plt.figure(figsize=(10, 10))
-    ax = plt.gca()
-    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=140, textprops={'fontsize': 20})
-    ax.set_title(title, fontsize=20, pad=20)
-    ax.axis('equal')
-    plt.tight_layout()
-
-    # Salvar o gráfico em um buffer
-    img_buffer = BytesIO()
-    plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=100)
-    img_buffer.seek(0)
-    plt.close()
-
-    return send_file(img_buffer, mimetype='image/png')
-
+@app.route('/data/pie/<type>/<value>')
+def data_pie(type, value):
+    conn = get_db_connection()
+    try:
+        if type == 'condition':
+            data = conn.execute('''
+                SELECT gender, COUNT(*) as count 
+                FROM patients 
+                WHERE patient_id IN (
+                    SELECT patient_id FROM conditions WHERE condition_text = ?
+                )
+                GROUP BY gender
+            ''', (value,)).fetchall()
+        elif type == 'medication':
+            data = conn.execute('''
+                SELECT gender, COUNT(*) as count 
+                FROM patients 
+                WHERE patient_id IN (
+                    SELECT patient_id FROM medications WHERE medication_text = ?
+                )
+                GROUP BY gender
+            ''', (value,)).fetchall()
+        else:
+            return jsonify({'error': 'Tipo inválido'}), 400
+        
+        data = [dict(row) for row in data]
+        
+        return jsonify({
+            'labels': [row['gender'] for row in data],
+            'counts': [row['count'] for row in data],
+            'total': sum(row['count'] for row in data)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
