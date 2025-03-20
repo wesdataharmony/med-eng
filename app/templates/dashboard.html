@@ -2,114 +2,11 @@
 <html>
 <head>
     <title>Dashboard Médico</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
     <!-- Incluir Chart.js via CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            margin: 20px;
-            font-family: Arial, sans-serif;
-        }
-        .dashboard-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-        }
-        .column {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-        .chart-container {
-            transition: transform 0.2s;
-            background: #ffffff;
-            border: 1px solid #e0e0e0;
-        }
-        .chart-container:hover {
-            transform: translateY(-3px);
-        }
-        .list-card li {
-            transition: all 0.2s;
-            position: relative;
-        }
-        .list-card li:hover {
-            transform: translateX(5px);
-            box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
-        }
-        canvas {
-            max-height: 300px;
-        }
-        .list-card, .chart-container {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .list-card {
-            max-height: 359px;
-            overflow-y: auto;
-        }
-        .chart-container {
-            text-align: center;
-            min-height: 350px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        h2 {
-            margin-bottom: 10px;
-            font-size: 1.1em;
-            color: #2c3e50;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        li {
-            padding: 8px;
-            margin: 5px 0;
-            background: white;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.2s;
-            font-size: 0.9em;
-        }
-        li:hover {
-            background: #e9ecef;
-        }
-        .stats-item {
-            padding: 10px;
-            margin: 5px 0;
-            background: white;
-            border-radius: 4px;
-            font-size: 0.9em;
-        }
-        canvas {
-            max-width: 100%;
-            height: auto;
-        }
-        .loader {
-            font-style: italic;
-            color: #666;
-        }
-        .error {
-            color: #dc3545;
-            padding: 15px;
-            text-align: center;
-        }
-        .chart-container {
-            min-height: 400px;  /* Aumente este valor se o título ainda estiver oculto */
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        @media (max-width: 1200px) {
-            .dashboard-container {
-                grid-template-columns: 1fr;
-            }
-        }
+        
     </style>
 </head>
 <body>
