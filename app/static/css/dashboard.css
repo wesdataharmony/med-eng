@@ -1,0 +1,244 @@
+/* static/css/dashboard.css */
+body {
+    margin: 20px;
+    font-family: Arial, sans-serif;
+}
+
+.dashboard-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.chart-container {
+    transition: transform 0.2s;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    min-height: 400px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-container:hover {
+    transform: translateY(-3px);
+}
+
+.list-card {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    max-height: 359px;
+    overflow-y: auto;
+    position: relative;
+}
+
+.list-card h2 {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa;
+    z-index: 1;
+    padding: 0 0 10px 0;
+    margin: 0 0 10px 0;
+}
+
+.list-card li {
+    transition: all 0.2s;
+    position: relative;
+    padding: 8px;
+    margin: 5px 0;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    list-style: none;
+}
+
+.list-card li:hover {
+    transform: translateX(5px);
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+    background: #e9ecef;
+}
+
+
+canvas {
+    max-height: 300px;
+    max-width: 100%;
+    height: auto;
+}
+
+.stats-item {
+    padding: 10px;
+    margin: 5px 0;
+    background: white;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.loader {
+    font-style: italic;
+    color: #666;
+}
+
+.error {
+    color: #dc3545;
+    padding: 15px;
+    text-align: center;
+}
+
+@media (max-width: 1200px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.column {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.chart-container {
+    transition: transform 0.2s;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+}
+.chart-container:hover {
+    transform: translateY(-3px);
+}
+.list-card li {
+    transition: all 0.2s;
+    position: relative;
+}
+.list-card li:hover {
+    transform: translateX(5px);
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+}
+canvas {
+    max-height: 300px;
+}
+.list-card, .chart-container {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.list-card {
+    max-height: 359px;
+    overflow-y: auto;
+}
+.chart-container {
+    text-align: center;
+    min-height: 350px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+h2 {
+    margin-bottom: 10px;
+    font-size: 1.1em;
+    color: #2c3e50;
+}
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+li {
+    padding: 8px;
+    margin: 5px 0;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.9em;
+}
+li:hover {
+    background: #e9ecef;
+}
+.stats-item {
+    padding: 10px;
+    margin: 5px 0;
+    background: white;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+.loader {
+    font-style: italic;
+    color: #666;
+}
+.error {
+    color: #dc3545;
+    padding: 15px;
+    text-align: center;
+}
+.chart-container {
+    min-height: 400px;  /* Aumente este valor se o título ainda estiver oculto */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+/* Estilização personalizada do scroll */
+.list-card::-webkit-scrollbar {
+    width: 8px;
+}
+
+.list-card::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.list-card::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+    transition: background 0.3s;
+}
+
+.list-card::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Para Firefox */
+.list-card {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+}
+
+/* Suavizar o scroll */
+.list-card {
+    scroll-behavior: smooth;
+}
+
+/* Adicionar sombra suave no título fixo */
+.list-card h2 {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding-bottom: 15px;
+}
+
+/* Arredondar bordas dos containers */
+.list-card, .chart-container {
+    border-radius: 12px;
+}
+
+/* Ajustar transições */
+.list-card li {
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chart-container {
+    transition: transform 0.3s ease-out;
+}
