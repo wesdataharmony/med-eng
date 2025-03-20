@@ -12,6 +12,9 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 - Dashboard interativo com:
   - Top 10 condições médicas
   - Top 10 medicamentos prescritos
+  - Gráfico de Barra horizontal Condições Médicas
+  - Gráfico de Barra horizontal Medicamentos
+  - Gráfico de Pizza
   - Estatísticas demográficas
 
 ## 🚀 Execução
