@@ -3,13 +3,13 @@ Solução para processamento e visualização de dados médicos no padrão FHIR
 
 ## ⚠️ Arquivo "docker-compose.yml" não implementado
 ## Futuras Melhorias e Implementações:
-## Processamento de Dados com Apache Spark
+## ⚠️ Processamento de Dados com Apache Spark
 O processamento dos dados será aprimorado utilizando Apache Spark, permitindo o processamento em larga escala de grandes volumes de dados de maneira distribuída. Com o uso de Spark, será possível otimizar o tempo de processamento e garantir maior eficiência, especialmente ao lidar com conjuntos de dados mais complexos.
 
-## Orquestração de Fluxos com Apache Airflow
+## ⚠️ Orquestração de Fluxos com Apache Airflow
 Para garantir a automação e o controle dos fluxos de dados, a orquestração será implementada com Apache Airflow. Com Airflow, será possível agendar, monitorar e gerenciar as tarefas de ETL de forma mais robusta, além de garantir que as dependências entre as etapas de processamento sejam gerenciadas adequadamente.
 
-## Dockerização do Projeto
+## ⚠️ Dockerização do Projeto
 A dockerização do projeto será realizada para garantir que o ambiente de desenvolvimento, testes e produção seja consistente e facilmente escalável. Utilizando Docker, será possível criar containers isolados para todos os componentes do sistema, incluindo o backend, banco de dados, e orquestrador Airflow. Isso facilita a implementação em diferentes ambientes e aumenta a portabilidade da solução.
 
 ## Detalhamento da Modelagem:
