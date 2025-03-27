@@ -486,30 +486,23 @@ def migrate_to_postgres():
         if postgres_conn:
             postgres_conn.rollback()
     finally:
-        # Ordem correta de fechamento
-        try:
-            if 'postgres_cursor' in locals(): 
-                postgres_cursor.close()
-        except Exception as e:
-            print(f"Erro ao fechar cursor PostgreSQL: {str(e)}")
+        # Fechamento seguro na ordem inversa de criação
+        close_objects = [
+            (postgres_cursor, "cursor PostgreSQL"),
+            (postgres_conn, "conexão PostgreSQL"),
+            (sqlite_cursor, "cursor SQLite"),
+            (sqlite_conn, "conexão SQLite")
+        ]
 
-        try:
-            if postgres_conn is not None: 
-                postgres_conn.close()
-        except Exception as e:
-            print(f"Erro ao fechar conexão PostgreSQL: {str(e)}")
+        for obj, obj_type in close_objects:
+            try:
+                if obj is not None:
+                    obj.close()
+            except Exception as e:
+                print(f"Erro ao fechar {obj_type}: {str(e)}")
+            except AttributeError:
+                pass  # Caso o objeto já esteja fechado
 
-        try:
-            if 'sqlite_cursor' in locals(): 
-                sqlite_cursor.close()
-        except Exception as e:
-            print(f"Erro ao fechar cursor SQLite: {str(e)}")    
-
-        try:
-            if sqlite_conn is not None: 
-                sqlite_conn.close()
-        except Exception as e:
-            print(f"Erro ao fechar conexão SQLite: {str(e)}")    
         cancel_flag = True
 
 def migrate_aggregated_data_to_postgres():
