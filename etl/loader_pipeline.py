@@ -15,6 +15,7 @@ import subprocess
 import webbrowser
 from config.settings import DB_CONFIG_SQLITE, DB_CONFIG_POSTGRES
 from app import routes
+import traceback
 
 # Configurações de URL e diretórios
 DATA_URL = "https://api.github.com/repos/wandersondsm/teste_engenheiro/contents/data?ref=main"
@@ -46,7 +47,6 @@ def create_sqlite_schema(conn):
     """Cria as tabelas no SQLite com verificação de existência"""
     cursor = conn.cursor()
     
-    # Tabela patients primeiro (devido às FKs)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS patients (
             patient_id TEXT PRIMARY KEY,
@@ -82,7 +82,6 @@ def create_sqlite_schema(conn):
         )
     """)
 
-    # Criar índices
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_conditions_text ON conditions(condition_text)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_medications_text ON medications(medication_text)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_patients_gender ON patients(gender)")
@@ -97,22 +96,19 @@ def get_postgres_connection():
         user=DB_CONFIG_POSTGRES['user'],
         password=DB_CONFIG_POSTGRES['password'],
         host=DB_CONFIG_POSTGRES['host'],
-        port=DB_CONFIG_POSTGRES['port'],
-        #schema=DB_CONFIG_POSTGRES['schema']
+        port=DB_CONFIG_POSTGRES['port']
     )
     return conn
 
 def create_postgres_schema(conn):
     """Cria o schema e as tabelas no PostgreSQL com a coluna data_inclusao"""
     cursor = conn.cursor()
-    
-    # Criar o schema se não existir
+
     cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}")
-    
-    # Definir o search_path para o schema especificado
+    conn.commit()
+
     cursor.execute(f"SET search_path TO {DB_CONFIG_POSTGRES['schema']}")
-    
-    # Criar tabela patients
+
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.patients (
             patient_id TEXT PRIMARY KEY,
@@ -121,7 +117,6 @@ def create_postgres_schema(conn):
         )
     """)
     
-    # Criar tabela conditions
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.conditions (
             id SERIAL PRIMARY KEY,
@@ -132,7 +127,6 @@ def create_postgres_schema(conn):
         )
     """)
     
-    # Criar tabela medications
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.medications (
             id SERIAL PRIMARY KEY,
@@ -143,7 +137,6 @@ def create_postgres_schema(conn):
         )
     """)
     
-    # Criar tabela processed_files
     cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.processed_files (
             file_name TEXT PRIMARY KEY,
@@ -151,7 +144,30 @@ def create_postgres_schema(conn):
         )
     """)
     
-    # Criar índices para otimizar consultas
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.aggregated_conditions (
+            condition_text TEXT PRIMARY KEY,
+            count INTEGER,
+            data_inclusao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.aggregated_medications (
+            medication_text TEXT PRIMARY KEY,
+            count INTEGER,
+            data_inclusao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS {DB_CONFIG_POSTGRES['schema']}.gender_stats (
+            gender TEXT PRIMARY KEY,
+            count INTEGER,
+            data_inclusao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_conditions_text ON {DB_CONFIG_POSTGRES['schema']}.conditions(condition_text)")
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_medications_text ON {DB_CONFIG_POSTGRES['schema']}.medications(medication_text)")
     cursor.execute(f"CREATE INDEX IF NOT EXISTS idx_patients_gender ON {DB_CONFIG_POSTGRES['schema']}.patients(gender)")
@@ -159,114 +175,407 @@ def create_postgres_schema(conn):
     conn.commit()
     cursor.close()
 
+def check_migration_status():
+    """Verifica de forma segura se a migração foi completada"""
+    try:
+        conn = get_postgres_connection()
+        cursor = conn.cursor()
+        
+        # Verificar existência do schema
+        cursor.execute("SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = %s)", 
+                      (DB_CONFIG_POSTGRES['schema'],))
+        if not cursor.fetchone()[0]:
+            return False
+            
+        # Verificar existência das tabelas
+        required_tables = {'patients', 'conditions', 'medications', 'processed_files'}
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = %s
+        """, (DB_CONFIG_POSTGRES['schema'],))
+        existing_tables = {row[0] for row in cursor.fetchall()}
+        
+        if not required_tables.issubset(existing_tables):
+            return False
+            
+        # Verificar dados
+        for table in required_tables:
+            cursor.execute(f"SELECT EXISTS(SELECT 1 FROM {DB_CONFIG_POSTGRES['schema']}.{table} LIMIT 1)")
+            if not cursor.fetchone()[0]:
+                return False
+                
+        return True
+        
+    except psycopg2.Error as e:
+        print(f"\nERRO POSTGRESQL: {str(e)}")
+        return False
+    finally:
+        if 'cursor' in locals(): cursor.close()
+        if 'conn' in locals(): conn.close()
+
+def validate_data_for_postgres(conn):
+    """Valida os dados do SQLite para migração para o PostgreSQL"""
+    print("\nValidando dados para migração...")
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT patient_id, gender, data_inclusao FROM patients")
+    invalid_patients = []
+    
+    for row in cursor.fetchall():
+        patient_id, gender, data_inclusao = row
+        if patient_id is None or patient_id == '':
+            invalid_patients.append((patient_id, "Patient ID não pode ser nulo ou vazio"))
+    
+    if invalid_patients:
+        print(f"Encontrados {len(invalid_patients)} pacientes com dados inválidos:")
+        for patient_id, error in invalid_patients[:5]:
+            print(f"  - Patient ID: {patient_id}, Erro: {error}")
+        if len(invalid_patients) > 5:
+            print(f"  ... e mais {len(invalid_patients) - 5} registros com problemas.")
+        return False
+    
+    cursor.execute("""
+        SELECT c.patient_id
+        FROM conditions c
+        LEFT JOIN patients p ON c.patient_id = p.patient_id
+        WHERE p.patient_id IS NULL
+        GROUP BY c.patient_id
+    """)
+    
+    orphan_conditions = cursor.fetchall()
+    if orphan_conditions:
+        print(f"Encontradas {len(orphan_conditions)} condições sem paciente correspondente:")
+        for row in orphan_conditions[:5]:
+            print(f"  - Patient ID: {row[0]}")
+        if len(orphan_conditions) > 5:
+            print(f"  ... e mais {len(orphan_conditions) - 5} registros com problemas.")
+        return False
+    
+    cursor.execute("""
+        SELECT m.patient_id
+        FROM medications m
+        LEFT JOIN patients p ON m.patient_id = p.patient_id
+        WHERE p.patient_id IS NULL
+        GROUP BY m.patient_id
+    """)
+    
+    orphan_medications = cursor.fetchall()
+    if orphan_medications:
+        print(f"Encontrados {len(orphan_medications)} medicamentos sem paciente correspondente:")
+        for row in orphan_medications[:5]:
+            print(f"  - Patient ID: {row[0]}")
+        if len(orphan_medications) > 5:
+            print(f"  ... e mais {len(orphan_medications) - 5} registros com problemas.")
+        return False
+    
+    print("Todos os dados são válidos para migração.")
+    return True
+
+def estimate_migration_time(total_records):
+    """Estima o tempo de migração com base em uma taxa realista"""
+    time_per_record = 0.12  # 0.12 segundos por registro
+    return total_records * time_per_record
+
+def format_time(seconds):
+    """Formata segundos em horas, minutos e segundos"""
+    minutes, seconds = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    parts = []
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0:
+        parts.append(f"{minutes}m")
+    if seconds > 0 and hours == 0:
+        parts.append(f"{seconds}s")
+    return " ".join(parts) or "0s"
+
+def print_progress(current, total, prefix=""):
+    """Exibe uma barra de progresso simples no console"""
+    bar_length = 40
+    fraction = current / total if total else 0
+    arrow = int(fraction * bar_length) * "="
+    spaces = (bar_length - len(arrow)) * " "
+    percent = int(fraction * 100)
+    print(f"\r{prefix} [{arrow}{spaces}] {percent}% ({current}/{total})", end="", flush=True)
+
+cancel_flag = False
+
+def cancel_monitor():
+    """Monitora entrada do usuário para cancelamento"""
+    global cancel_flag
+    input()
+    cancel_flag = True
+
+def check_cancel():
+    """Verifica se houve solicitação de cancelamento"""
+    global cancel_flag
+    if cancel_flag:
+        print("\nOperação cancelada pelo usuário!")
+        return True
+    return False
+
 def migrate_to_postgres():
-    """Migra os dados do SQLite para o PostgreSQL com barra de progresso"""
-    print("\nIniciando migração para PostgreSQL...")
+    """Migra os dados do SQLite para o PostgreSQL com controle de cancelamento"""
+    if check_migration_status():
+        print("\nOs dados processados e inseridos já foram migrados.")
+        return
+    
+    global cancel_flag
+    cancel_flag = False
+    sqlite_conn = None
+    postgres_conn = None
+    sqlite_cursor = None
+    postgres_cursor = None
+    
+    start_time = time.time()
+  
+    try:
+        sqlite_conn = get_sqlite_connection()
+
+        if not validate_data_for_postgres(sqlite_conn):
+            print("\nMigração cancelada devido a problemas nos dados.")
+            sqlite_conn.close()
+            return
+        
+        tables = {
+            'patients': 0,
+            'conditions': 0,
+            'medications': 0,
+            'processed_files': 0
+        }
+        
+        for table in tables:
+            sqlite_cursor = sqlite_conn.cursor()
+            sqlite_cursor.execute(f"SELECT COUNT(*) FROM {table}")
+            tables[table] = sqlite_cursor.fetchone()[0]
+            sqlite_cursor.close()
+        
+        total_records = sum(tables.values())
+        if total_records == 0:
+            print("Não há dados para migrar.")
+            sqlite_conn.close()
+            return
+
+        # Confirmação do usuário
+        print(f"\n⚠️ ATENÇÃO: Esta operação pode levar aproximadamente {format_time(estimate_migration_time(total_records))}")
+        print(f"• Total de registros: {total_records:,}")
+        print(f"• Pacientes: {tables['patients']:,}")
+        print(f"• Condições: {tables['conditions']:,}")
+        print(f"• Medicamentos: {tables['medications']:,}")
+
+        confirm = input("\nDeseja prosseguir com a migração? (S/N) ").strip().upper()
+        if confirm != 'S':
+            print("\nMigração cancelada pelo usuário.")
+            return
+        
+        postgres_conn = get_postgres_connection()
+        create_postgres_schema(postgres_conn)
+        sqlite_cursor = sqlite_conn.cursor()
+        postgres_cursor = postgres_conn.cursor()
+
+        cancel_thread = threading.Thread(target=cancel_monitor)
+        cancel_thread.daemon = True
+        cancel_thread.start()
+        
+        current_record = 0
+        batch_size = 500
+
+        print("\nMigrando pacientes...")
+        sqlite_cursor.execute("SELECT patient_id, gender, data_inclusao FROM patients")
+        while True:
+            batch = sqlite_cursor.fetchmany(batch_size)
+            if not batch or check_cancel():
+                break
+
+            for row in batch:
+                try:
+                    postgres_cursor.execute(
+                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.patients VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
+                        row
+                    )
+                    current_record += 1
+                except Exception as e:
+                    print(f"\nErro no paciente {row[0]}: {str(e)}")
+            
+            postgres_conn.commit()
+            print_progress(current_record, tables['patients'], prefix="Pacientes")
+
+        if check_cancel():
+            return
+
+        print("\n\nMigrando condições...")
+        sqlite_cursor.execute("SELECT patient_id, condition_text, data_inclusao FROM conditions")
+        current_record = 0
+        while True:
+            batch = sqlite_cursor.fetchmany(batch_size)
+            if not batch or check_cancel():
+                break
+
+            for row in batch:
+                try:
+                    postgres_cursor.execute(
+                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.conditions (patient_id, condition_text, data_inclusao) VALUES (%s, %s, %s)",
+                        row
+                    )
+                    current_record += 1
+                except Exception as e:
+                    print(f"\nErro na condição do paciente {row[0]}: {str(e)}")
+            
+            postgres_conn.commit()
+            print_progress(current_record, tables['conditions'], prefix="Condições  ")
+
+        if check_cancel():
+            return
+
+        print("\n\nMigrando medicamentos...")
+        sqlite_cursor.execute("SELECT patient_id, medication_text, data_inclusao FROM medications")
+        current_record = 0
+        while True:
+            batch = sqlite_cursor.fetchmany(batch_size)
+            if not batch or check_cancel():
+                break
+
+            for row in batch:
+                try:
+                    postgres_cursor.execute(
+                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.medications (patient_id, medication_text, data_inclusao) VALUES (%s, %s, %s)",
+                        row
+                    )
+                    current_record += 1
+                except Exception as e:
+                    print(f"\nErro no medicamento do paciente {row[0]}: {str(e)}")
+            
+            postgres_conn.commit()
+            print_progress(current_record, tables['medications'], prefix="Medicamentos")
+
+        if check_cancel():
+            return
+
+        print("\n\nMigrando arquivos processados...")
+        sqlite_cursor.execute("SELECT file_name, data_inclusao FROM processed_files")
+        current_record = 0
+        while True:
+            batch = sqlite_cursor.fetchmany(batch_size)
+            if not batch or check_cancel():
+                break
+
+            for row in batch:
+                try:
+                    postgres_cursor.execute(
+                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.processed_files VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                        row
+                    )
+                    current_record += 1
+                except Exception as e:
+                    print(f"\nErro no arquivo {row[0]}: {str(e)}")
+            
+            postgres_conn.commit()
+            print_progress(current_record, tables['processed_files'], prefix="Arquivos    ")
+
+        elapsed = time.time() - start_time
+        print(f"\n\nMigração concluída com sucesso!")
+        print(f"Tempo total: {format_time(elapsed)}")
+        print(f"Registros migrados: {sum(tables.values())}")
+
+    except Exception as e:
+        if 'postgres_conn' in locals():
+            postgres_conn.rollback()
+        print(f"\n❌ ERRO NA MIGRAÇÃO: {str(e)}")
+        traceback.print_exc()
+        if postgres_conn:
+            postgres_conn.rollback()
+    finally:
+        # Ordem correta de fechamento
+        try:
+            if 'postgres_cursor' in locals(): 
+                postgres_cursor.close()
+        except Exception as e:
+            print(f"Erro ao fechar cursor PostgreSQL: {str(e)}")
+
+        try:
+            if postgres_conn is not None: 
+                postgres_conn.close()
+        except Exception as e:
+            print(f"Erro ao fechar conexão PostgreSQL: {str(e)}")
+
+        try:
+            if 'sqlite_cursor' in locals(): 
+                sqlite_cursor.close()
+        except Exception as e:
+            print(f"Erro ao fechar cursor SQLite: {str(e)}")    
+
+        try:
+            if sqlite_conn is not None: 
+                sqlite_conn.close()
+        except Exception as e:
+            print(f"Erro ao fechar conexão SQLite: {str(e)}")    
+        cancel_flag = True
+
+def migrate_aggregated_data_to_postgres():
+    """Migra os dados agregados do SQLite para o PostgreSQL"""
+    print("Iniciando migração de dados agregados para PostgreSQL...")
+    try:
+        postgres_conn = get_postgres_connection()
+        create_postgres_schema(postgres_conn)
+    except Exception as e:
+        print(f"Erro ao conectar ao PostgreSQL: {str(e)}")
+        return
+        
     start_time = time.time()
     
     sqlite_conn = get_sqlite_connection()
-    postgres_conn = get_postgres_connection()
-    create_postgres_schema(postgres_conn)
-    
     sqlite_cursor = sqlite_conn.cursor()
     postgres_cursor = postgres_conn.cursor()
     
     try:
-        # Contar o número total de registros para calcular progresso
-        sqlite_cursor.execute("SELECT COUNT(*) FROM patients")
-        patients_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM conditions")
-        conditions_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM medications")
-        medications_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM processed_files")
-        files_count = sqlite_cursor.fetchone()[0]
-        
-        total_records = patients_count + conditions_count + medications_count + files_count
-        if total_records == 0:
-            print("Não há dados para migrar. Encerrando migração.")
-            return
-            
-        current_record = 0
-        
-        # Migrar patients
-        print("\nMigrando pacientes...")
-        sqlite_cursor.execute("SELECT patient_id, gender, data_inclusao FROM patients")
-        patients = sqlite_cursor.fetchall()
-        
-        for i, row in enumerate(patients):
-            patient_id, gender, data_inclusao = row
+        print("Migrando aggregated_conditions...")
+        sqlite_cursor.execute("""
+            SELECT condition_text, COUNT(*) as count 
+            FROM conditions 
+            GROUP BY condition_text 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        for row in sqlite_cursor.fetchall():
             postgres_cursor.execute(
-                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.patients (patient_id, gender, data_inclusao) VALUES (%s, %s, %s) ON CONFLICT (patient_id) DO NOTHING",
-                (patient_id, gender, data_inclusao)
+                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.aggregated_conditions VALUES (%s, %s) ON CONFLICT (condition_text) DO UPDATE SET count = EXCLUDED.count",
+                row
             )
-            current_record += 1
-            print_progress(current_record, total_records, prefix="Migração total")
         
-        # Migrar conditions
-        print("\nMigrando condições...")
-        sqlite_cursor.execute("SELECT patient_id, condition_text, data_inclusao FROM conditions")
-        conditions = sqlite_cursor.fetchall()
-        
-        for i, row in enumerate(conditions):
-            patient_id, condition_text, data_inclusao = row
+        print("\nMigrando aggregated_medications...")
+        sqlite_cursor.execute("""
+            SELECT medication_text, COUNT(*) as count 
+            FROM medications 
+            GROUP BY medication_text 
+            ORDER BY count DESC 
+            LIMIT 10
+        """)
+        for row in sqlite_cursor.fetchall():
             postgres_cursor.execute(
-                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.conditions (patient_id, condition_text, data_inclusao) VALUES (%s, %s, %s)",
-                (patient_id, condition_text, data_inclusao)
+                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.aggregated_medications VALUES (%s, %s) ON CONFLICT (medication_text) DO UPDATE SET count = EXCLUDED.count",
+                row
             )
-            current_record += 1
-            if i % 100 == 0:  # Atualizar a cada 100 registros para não sobrecarregar o console
-                print_progress(current_record, total_records, prefix="Migração total")
         
-        # Migrar medications
-        print("\nMigrando medicamentos...")
-        sqlite_cursor.execute("SELECT patient_id, medication_text, data_inclusao FROM medications")
-        medications = sqlite_cursor.fetchall()
-        
-        for i, row in enumerate(medications):
-            patient_id, medication_text, data_inclusao = row
+        print("\nMigrando gender_stats...")
+        sqlite_cursor.execute("""
+            SELECT gender, COUNT(*) as count 
+            FROM patients 
+            GROUP BY gender
+        """)
+        for row in sqlite_cursor.fetchall():
             postgres_cursor.execute(
-                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.medications (patient_id, medication_text, data_inclusao) VALUES (%s, %s, %s)",
-                (patient_id, medication_text, data_inclusao)
+                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.gender_stats VALUES (%s, %s) ON CONFLICT (gender) DO UPDATE SET count = EXCLUDED.count",
+                row
             )
-            current_record += 1
-            if i % 100 == 0:  # Atualizar a cada 100 registros
-                print_progress(current_record, total_records, prefix="Migração total")
         
-        # Migrar processed_files
-        print("\nMigrando arquivos processados...")
-        sqlite_cursor.execute("SELECT file_name, data_inclusao FROM processed_files")
-        files = sqlite_cursor.fetchall()
-        
-        for i, row in enumerate(files):
-            file_name, data_inclusao = row
-            postgres_cursor.execute(
-                f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.processed_files (file_name, data_inclusao) VALUES (%s, %s) ON CONFLICT (file_name) DO NOTHING",
-                (file_name, data_inclusao)
-            )
-            current_record += 1
-            if i % 100 == 0:  # Atualizar a cada 100 registros
-                print_progress(current_record, total_records, prefix="Migração total")
-        
-        # Commit final
         postgres_conn.commit()
-        
         elapsed = time.time() - start_time
-        print(f"\n\nMigração concluída com sucesso!")
-        print(f"Tempo total: {int(elapsed // 60)}m {int(elapsed % 60)}s")
-        print(f"Registros migrados: {current_record}/{total_records}")
-        print(f"- Pacientes: {patients_count}")
-        print(f"- Condições: {conditions_count}")
-        print(f"- Medicamentos: {medications_count}")
-        print(f"- Arquivos processados: {files_count}")
-    
+        print(f"\nMigração de dados agregados concluída em {format_time(elapsed)}")
+
     except Exception as e:
         postgres_conn.rollback()
-        print(f"\nERRO NA MIGRAÇÃO: {str(e)}")
-        # Exibir rastreamento completo para facilitar o debug
+        print(f"\nERRO: {str(e)}")
         import traceback
         traceback.print_exc()
     finally:
@@ -275,8 +584,46 @@ def migrate_to_postgres():
         sqlite_conn.close()
         postgres_conn.close()
 
+def check_postgres_connection():
+    """Verifica se a conexão com PostgreSQL está ativa"""
+    try:
+        conn = get_postgres_connection()
+        conn.close()
+        return True
+    except psycopg2.OperationalError as e:
+        print(f"\nERRO: Não foi possível conectar ao PostgreSQL - {str(e)}")
+        return False
 
+def handle_migration_choice(choice):
+    """Lida com a escolha de migração de forma segura"""
+    try:
+        if choice == 'M':
+            if check_migration_status():
+                print("\n✓ Migração já foi realizada e os dados estão íntegros")
+                return
+                
+            print("\nIniciando migração completa...")
+            migrate_to_postgres()
+            
+        elif choice == 'A':
+            #print("\nIniciando migração de dados agregados...")
+            migrate_aggregated_data_to_postgres()
+            
+    except Exception as e:
+        print(f"\n❌ ERRO CRÍTICO: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
+def handle_visualization_choice(choice):
+    """Lida com a escolha de visualização do dashboard"""
+    if choice == 'V':
+        print("\nIniciando dashboard...")
+        try:
+            subprocess.Popen([sys.executable, "-m", "app.routes"])
+            webbrowser.open("http://localhost:5000/")
+        except Exception as e:
+            print(f"Erro ao iniciar dashboard: {str(e)}")
+    print("\nO dashboard foi aberto em seu navegador. Você pode continuar usando o terminal.")
 
 def is_file_processed(conn, file_name):
     """Verifica se o arquivo já foi processado"""
@@ -330,23 +677,6 @@ def get_remote_files():
     except Exception as e:
         print(f"\nERRO: Falha na conexão com o GitHub - {str(e)}")
         return None
-
-def calculate_file_hash(file_path):
-    """Calcula hash SHA-256 do arquivo"""
-    sha256 = hashlib.sha256()
-    with open(file_path, 'rb') as f:
-        while chunk := f.read(4096):
-            sha256.update(chunk)
-    return sha256.hexdigest()
-
-def print_progress(current, total, prefix=""):
-    """Exibe uma barra de progresso simples no console"""
-    bar_length = 40
-    fraction = current / total if total else 0
-    arrow = int(fraction * bar_length) * "="
-    spaces = (bar_length - len(arrow)) * " "
-    percent = int(fraction * 100)
-    print(f"\r{prefix} [{arrow}{spaces}] {percent}% ({current}/{total})", end="", flush=True)
 
 def download_files():
     """Baixa os arquivos JSON do repositório e os adiciona à fila"""
@@ -486,14 +816,6 @@ def process_files():
         print(f"- Erros: {errors_count}")
         print(f"- Tempo total: {int(elapsed // 60)}m {int(elapsed % 60)}s")
 
-def handle_dashboard_choice(choice):
-    if choice == 'S':
-        print("Iniciando dashboard...")
-        subprocess.Popen(["python", "-m", "app.routes"])
-        webbrowser.open("http://localhost:5000/")
-    elif choice == 'N':
-        print("Encerrando o programa.")
-
 def validate_environment():
     """Verifica estrutura de diretórios necessária"""
     required_dirs = [
@@ -506,436 +828,83 @@ def validate_environment():
         if not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
 
-def check_postgres_tables_exist():
-    """Verifica se todas as tabelas necessárias existem no PostgreSQL e se têm dados"""
-    required_tables = {'patients', 'conditions', 'medications', 'processed_files'}
-    try:
-        conn = get_postgres_connection()
-        cursor = conn.cursor()
-        
-        # Verificar se o schema existe
-        cursor.execute("""
-            SELECT schema_name 
-            FROM information_schema.schemata 
-            WHERE schema_name = %s
-        """, (DB_CONFIG_POSTGRES['schema'],))
-        
-        if cursor.fetchone() is None:
-            print(f"O schema '{DB_CONFIG_POSTGRES['schema']}' não existe no PostgreSQL.")
-            return False
-        
-        # Verificar tabelas existentes
-        cursor.execute("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = %s
-        """, (DB_CONFIG_POSTGRES['schema'],))
-        
-        existing_tables = {row[0] for row in cursor.fetchall()}
-        missing_tables = required_tables - existing_tables
-        
-        if missing_tables:
-            print(f"Tabelas faltando no PostgreSQL: {', '.join(missing_tables)}")
-            return False
-        
-        # Verificar se há dados nas tabelas
-        has_data = False
-        for table in required_tables:
-            cursor.execute(f"SELECT COUNT(*) FROM {DB_CONFIG_POSTGRES['schema']}.{table}")
-            count = cursor.fetchone()[0]
-            if count > 0:
-                has_data = True
-                break
-        
-        conn.close()
-        
-        if not has_data:
-            print(f"As tabelas no PostgreSQL existem, mas não contêm dados.")
-            return False
-            
-        return True
-    except Exception as e:
-        print(f"\nERRO: Falha ao verificar tabelas no PostgreSQL - {str(e)}")
-        return False
-def validate_patient_data(patient_id, gender, data_inclusao):
-    """Valida dados de paciente para inserção no PostgreSQL"""
-    if patient_id is None or patient_id == '':
-        return False, "Patient ID não pode ser nulo ou vazio"
-    return True, None
-
-def validate_data_for_postgres(conn):
-    """Valida os dados do SQLite para migração para o PostgreSQL"""
-    print("\nValidando dados para migração...")
-    cursor = conn.cursor()
-    
-    # Validar pacientes
-    cursor.execute("SELECT patient_id, gender, data_inclusao FROM patients")
-    invalid_patients = []
-    
-    for row in cursor.fetchall():
-        patient_id, gender, data_inclusao = row
-        valid, error = validate_patient_data(patient_id, gender, data_inclusao)
-        if not valid:
-            invalid_patients.append((patient_id, error))
-    
-    if invalid_patients:
-        print(f"Encontrados {len(invalid_patients)} pacientes com dados inválidos:")
-        for patient_id, error in invalid_patients[:5]:  # Mostrar apenas os primeiros 5
-            print(f"  - Patient ID: {patient_id}, Erro: {error}")
-        if len(invalid_patients) > 5:
-            print(f"  ... e mais {len(invalid_patients) - 5} registros com problemas.")
-        return False
-    
-    # Verificar referências de chave estrangeira em conditions
-    cursor.execute("""
-        SELECT c.patient_id
-        FROM conditions c
-        LEFT JOIN patients p ON c.patient_id = p.patient_id
-        WHERE p.patient_id IS NULL
-        GROUP BY c.patient_id
-    """)
-    
-    orphan_conditions = cursor.fetchall()
-    if orphan_conditions:
-        print(f"Encontradas {len(orphan_conditions)} condições sem paciente correspondente:")
-        for row in orphan_conditions[:5]:
-            print(f"  - Patient ID: {row[0]}")
-        if len(orphan_conditions) > 5:
-            print(f"  ... e mais {len(orphan_conditions) - 5} registros com problemas.")
-        return False
-    
-    # Verificar referências de chave estrangeira em medications
-    cursor.execute("""
-        SELECT m.patient_id
-        FROM medications m
-        LEFT JOIN patients p ON m.patient_id = p.patient_id
-        WHERE p.patient_id IS NULL
-        GROUP BY m.patient_id
-    """)
-    
-    orphan_medications = cursor.fetchall()
-    if orphan_medications:
-        print(f"Encontrados {len(orphan_medications)} medicamentos sem paciente correspondente:")
-        for row in orphan_medications[:5]:
-            print(f"  - Patient ID: {row[0]}")
-        if len(orphan_medications) > 5:
-            print(f"  ... e mais {len(orphan_medications) - 5} registros com problemas.")
-        return False
-    
-    print("Todos os dados são válidos para migração.")
-    return True    
-    
-def format_date_for_postgres(date_str):
-    """Formata a data do SQLite para o PostgreSQL, tratando valores None"""
-    if date_str is None:
-        return None
-    try:
-        # Tenta converter a data para formato ISO, aceito pelo PostgreSQL
-        if isinstance(date_str, str):
-            # Tenta converter para datetime e depois para string no formato ISO
-            dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        return date_str
-    except Exception:
-        # Se falhar, retorna a data original
-        return date_str
-
-def migrate_to_postgres():
-    """Migra os dados do SQLite para o PostgreSQL com barra de progresso"""
-    print("\nIniciando migração para PostgreSQL...")
-    start_time = time.time()
-    
-    sqlite_conn = get_sqlite_connection()
-    
-    # Validar dados antes da migração
-    if not validate_data_for_postgres(sqlite_conn):
-        print("\nMigração cancelada devido a problemas nos dados.")
-        sqlite_conn.close()
-        return
-    
-    try:
-        postgres_conn = get_postgres_connection()
-        create_postgres_schema(postgres_conn)
-    except Exception as e:
-        print(f"\nErro ao conectar ao PostgreSQL: {str(e)}")
-        sqlite_conn.close()
-        return
-    
-    sqlite_cursor = sqlite_conn.cursor()
-    postgres_cursor = postgres_conn.cursor()
-    
-    try:
-        # Contar o número total de registros para calcular progresso
-        sqlite_cursor.execute("SELECT COUNT(*) FROM patients")
-        patients_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM conditions")
-        conditions_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM medications")
-        medications_count = sqlite_cursor.fetchone()[0]
-        
-        sqlite_cursor.execute("SELECT COUNT(*) FROM processed_files")
-        files_count = sqlite_cursor.fetchone()[0]
-        
-        total_records = patients_count + conditions_count + medications_count + files_count
-        if total_records == 0:
-            print("Não há dados para migrar. Encerrando migração.")
-            return
-            
-        current_record = 0
-        
-        # Migrar patients
-        print("\nMigrando pacientes...")
-        sqlite_cursor.execute("SELECT patient_id, gender, data_inclusao FROM patients")
-        batch_size = 500
-        while True:
-            batch = sqlite_cursor.fetchmany(batch_size)
-            if not batch:
-                break
-                
-            for row in batch:
-                patient_id, gender, data_inclusao = row
-                data_inclusao = format_date_for_postgres(data_inclusao)
-                
-                try:
-                    postgres_cursor.execute(
-                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.patients (patient_id, gender, data_inclusao) VALUES (%s, %s, %s) ON CONFLICT (patient_id) DO NOTHING",
-                        (patient_id, gender, data_inclusao)
-                    )
-                except Exception as e:
-                    print(f"\nErro ao inserir paciente {patient_id}: {str(e)}")
-                    continue
-                    
-                current_record += 1
-                print_progress(current_record, total_records, prefix="Migração total")
-        
-        # Commit intermediário
-        postgres_conn.commit()
-        
-        # Migrar conditions
-        print("\n\nMigrando condições...")
-        sqlite_cursor.execute("SELECT patient_id, condition_text, data_inclusao FROM conditions")
-        batch_count = 0
-        
-        while True:
-            batch = sqlite_cursor.fetchmany(batch_size)
-            if not batch:
-                break
-                
-            for row in batch:
-                patient_id, condition_text, data_inclusao = row
-                data_inclusao = format_date_for_postgres(data_inclusao)
-                
-                try:
-                    postgres_cursor.execute(
-                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.conditions (patient_id, condition_text, data_inclusao) VALUES (%s, %s, %s)",
-                        (patient_id, condition_text, data_inclusao)
-                    )
-                except Exception as e:
-                    print(f"\nErro ao inserir condição para paciente {patient_id}: {str(e)}")
-                    continue
-                    
-                current_record += 1
-                batch_count += 1
-                
-                if batch_count % 100 == 0:
-                    print_progress(current_record, total_records, prefix="Migração total")
-            
-            # Commit a cada lote
-            postgres_conn.commit()
-        
-        # Migrar medications
-        print("\n\nMigrando medicamentos...")
-        sqlite_cursor.execute("SELECT patient_id, medication_text, data_inclusao FROM medications")
-        batch_count = 0
-        
-        while True:
-            batch = sqlite_cursor.fetchmany(batch_size)
-            if not batch:
-                break
-                
-            for row in batch:
-                patient_id, medication_text, data_inclusao = row
-                data_inclusao = format_date_for_postgres(data_inclusao)
-                
-                try:
-                    postgres_cursor.execute(
-                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.medications (patient_id, medication_text, data_inclusao) VALUES (%s, %s, %s)",
-                        (patient_id, medication_text, data_inclusao)
-                    )
-                except Exception as e:
-                    print(f"\nErro ao inserir medicamento para paciente {patient_id}: {str(e)}")
-                    continue
-                    
-                current_record += 1
-                batch_count += 1
-                
-                if batch_count % 100 == 0:
-                    print_progress(current_record, total_records, prefix="Migração total")
-            
-            # Commit a cada lote
-            postgres_conn.commit()
-        
-        # Migrar processed_files
-        print("\n\nMigrando arquivos processados...")
-        sqlite_cursor.execute("SELECT file_name, data_inclusao FROM processed_files")
-        
-        while True:
-            batch = sqlite_cursor.fetchmany(batch_size)
-            if not batch:
-                break
-                
-            for row in batch:
-                file_name, data_inclusao = row
-                data_inclusao = format_date_for_postgres(data_inclusao)
-                
-                try:
-                    postgres_cursor.execute(
-                        f"INSERT INTO {DB_CONFIG_POSTGRES['schema']}.processed_files (file_name, data_inclusao) VALUES (%s, %s) ON CONFLICT (file_name) DO NOTHING",
-                        (file_name, data_inclusao)
-                    )
-                except Exception as e:
-                    print(f"\nErro ao inserir arquivo processado {file_name}: {str(e)}")
-                    continue
-                    
-                current_record += 1
-                print_progress(current_record, total_records, prefix="Migração total")
-            
-            # Commit a cada lote
-            postgres_conn.commit()
-        
-        # Commit final
-        postgres_conn.commit()
-        
-        elapsed = time.time() - start_time
-        print(f"\n\nMigração concluída com sucesso!")
-        print(f"Tempo total: {int(elapsed // 60)}m {int(elapsed % 60)}s")
-        print(f"Registros migrados: {current_record}/{total_records}")
-        print(f"- Pacientes: {patients_count}")
-        print(f"- Condições: {conditions_count}")
-        print(f"- Medicamentos: {medications_count}")
-        print(f"- Arquivos processados: {files_count}")
-    
-    except Exception as e:
-        postgres_conn.rollback()
-        print(f"\nERRO NA MIGRAÇÃO: {str(e)}")
-        # Exibir rastreamento completo para facilitar o debug
-        import traceback
-        traceback.print_exc()
-    finally:
-        sqlite_cursor.close()
-        postgres_cursor.close()
-        sqlite_conn.close()
-        postgres_conn.close()
-
-def handle_migration_choice(choice):
-    """Lida com a escolha de migração para o PostgreSQL"""
-    if choice == 'M':
-        if check_postgres_tables_exist():
-            print("\nAs tabelas no PostgreSQL já existem.")
-            # Perguntar se deseja reexecutar a migração mesmo assim
-            confirm = input("Deseja reexecutar a migração? (S/N) ").strip().upper()
-            if confirm == 'S':
-                try:
-                    migrate_to_postgres()
-                except Exception as e:
-                    print(f"\nERRO NA MIGRAÇÃO: {str(e)}")
-        else:
-            try:
-                migrate_to_postgres()
-            except Exception as e:
-                print(f"\nERRO NA MIGRAÇÃO: {str(e)}")
-    elif choice == 'N':
-        print("\nMigração para PostgreSQL não será realizada.")
-
-def handle_visualization_choice(choice):
-    """Lida com a escolha de visualização do dashboard"""
-    if choice == 'V':
-        print("\nIniciando dashboard...")
-        subprocess.Popen([sys.executable, "-m", "app.routes"])
-        webbrowser.open("http://localhost:5000/")
-    elif choice == 'N':
-        print("\nEncerrando o programa.")
-
-def handle_migration_choice(choice):
-    """Lida com a escolha de migração para o PostgreSQL"""
-    if choice == 'M':  # Alterado de 'S' para 'M' para corresponder à opção do menu
-        if check_postgres_tables_exist():
-            print("\nA migração das tabelas já foi realizada anteriormente.")
-        else:
-            try:
-                print("\nIniciando migração para PostgreSQL...")
-                migrate_to_postgres()
-                print("Migração concluída com sucesso!")
-            except Exception as e:
-                print(f"\nERRO NA MIGRAÇÃO: {str(e)}")
-    elif choice == 'N':
-        print("\nMigração para PostgreSQL não será realizada.")
-
 def main():
     global LOCAL_DATA_DIR
     validate_environment()
 
-    conn = get_sqlite_connection()
-    create_sqlite_schema(conn)
-    
-    try:
-        remote_files = get_remote_files()
-    except Exception as e:
-        print(f"Erro ao obter arquivos remotos: {str(e)}")
-        conn.close()
-        return
-
-    if remote_files is None:
-        print("Não foi possível verificar arquivos remotos. Verifique sua conexão.")
-        conn.close()
-        return
+    while True: 
+                # Verificar conexão com PostgreSQL
+        if not check_postgres_connection():
+            print("Verifique as configurações do PostgreSQL e tente novamente.")
+            return
+        conn = get_sqlite_connection()
+        create_sqlite_schema(conn)
         
-    files_to_process = [name for name in remote_files if not is_file_processed(conn, name)]
-    
-    if not files_to_process:
-        conn.close()
-        # Corrigido para separar as escolhas de migração e visualização
-        migration_choice = input("\nTodos os arquivos já foram processados!\nDeseja migrar os dados para o Postgres? (M/N) ").strip().upper()
-        handle_migration_choice(migration_choice)
+        try:
+            remote_files = get_remote_files()
+        except Exception as e:
+            print(f"Erro ao obter arquivos remotos: {str(e)}")
+            conn.close()
+            continue
+
+        if remote_files is None:
+            print("Não foi possível verificar arquivos remotos. Verifique sua conexão.")
+            conn.close()
+            continue
+            
+        files_to_process = [name for name in remote_files if not is_file_processed(conn, name)]
         
-        visualization_choice = input("\nDeseja visualizar os dados? (V/N) ").strip().upper()
-        handle_visualization_choice(visualization_choice)
-        return
+        if not files_to_process:
+            conn.close()
+            while True:  # Submenu interativo
+                print("\nEscolha uma opção:")
+                print("  V - Visualizar dados no dashboard")
+                print("  M - Migração normal (todos os registros)")
+                print("  A - Migração de dados agregados (resumos)")
+                print("  N - Sair do programa")
+                choice = input("Digite sua escolha (V/M/A/N): ").strip().upper()
 
-    current_time = datetime.now().strftime("%Y%m%d_Hs%H-%M")
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    process_dir = os.path.join(base_dir, 'data', f'data_process_{current_time}')
-    os.makedirs(process_dir, exist_ok=True)
-    LOCAL_DATA_DIR = process_dir
-    conn.close()
+                if choice == 'V':
+                    handle_visualization_choice('V')
+                elif choice == 'M':
+                    handle_migration_choice('M')
+                elif choice == 'A':
+                    handle_migration_choice('A')
+                elif choice == 'N':
+                    print("\nEncerrando programa...")
+                    return
+                else:
+                    print("Opção inválida. Tente novamente.")
+                
+                input("\nPressione Enter para continuar...")
+                #os.system('cls' if os.name == 'nt' else 'clear')  # Limpa a tela
+                
+        else:
+            current_time = datetime.now().strftime("%Y%m%d_Hs%H-%M")
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            process_dir = os.path.join(base_dir, 'data', f'data_process_{current_time}')
+            os.makedirs(process_dir, exist_ok=True)
+            LOCAL_DATA_DIR = process_dir
+            conn.close()
 
-    download_thread = threading.Thread(target=download_files)
-    process_thread = threading.Thread(target=process_files)
-    
-    download_thread.start()
-    process_thread.start()
-    
-    download_thread.join()
-    process_thread.join()
+            download_thread = threading.Thread(target=download_files)
+            process_thread = threading.Thread(target=process_files)
+            
+            download_thread.start()
+            process_thread.start()
+            
+            download_thread.join()
+            process_thread.join()
 
-    # Fluxo separado e claro para migração e visualização
-    while True:
-        migration_choice = input("\nDeseja migrar os dados para o Postgres? (M/N) ").strip().upper()
-        if migration_choice in ('M', 'N'):
-            break
-        print("Opção inválida. Digite M para migrar ou N para não migrar.")
-    
-    handle_migration_choice(migration_choice)
-
-    while True:
-        visualization_choice = input("\nDeseja visualizar os dados? (V/N) ").strip().upper()
-        if visualization_choice in ('V', 'N'):
-            break
-        print("Opção inválida. Digite V para visualizar ou N para sair.")
-    
-    handle_visualization_choice(visualization_choice)
+            while True:
+                visualization_choice = input("\nDeseja visualizar os dados agora? (V/N) ").strip().upper()
+                if visualization_choice in ('V', 'N'):
+                    break
+                print("Opção inválida. Digite V para visualizar ou N para sair.")
+            
+            handle_visualization_choice(visualization_choice)
+            input("\nPressione Enter para voltar ao menu principal...")
+            os.system('cls' if os.name == 'nt' else 'clear')
 
 if __name__ == '__main__':
     main()
