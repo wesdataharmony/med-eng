@@ -163,7 +163,7 @@ Principais tecnologias utilizadas:
 
 📦 #Fluxo Otimizado
  -   A[SQLite] --> B{Extração paralela}
- -   B -->|CSV batches| C[PostgreSQL COPY]
+ -   B --> CSV batches| C[PostgreSQL COPY]
  -   C --> D [Índices temporários]
  -   D --> E [Reconstrução de índices]
  -   E --> F [Dados agregados]
