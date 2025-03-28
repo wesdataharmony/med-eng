@@ -162,14 +162,12 @@ Principais tecnologias utilizadas:
 |IOPS de disco	       |2200	  |350	 |-84%    |
 
 📦 #Fluxo Otimizado
-
-graph TD
  -   A[SQLite] --> B{Extração paralela}
  -   B -->|CSV batches| C[PostgreSQL COPY]
- -   C --> D[Índices temporários]
- -   D --> E[Reconstrução de índices]
- -   E --> F[Dados agregados]
- -   F --> G[Commit final]
+ -   C --> D [Índices temporários]
+ -   D --> E [Reconstrução de índices]
+ -   E --> F [Dados agregados]
+ -   F --> G [Commit final]
 -    ✅ Benefícios Adicionais
 
 - Atomicidade: Rollback automático em caso de falha
