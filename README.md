@@ -129,17 +129,19 @@ A dockerização do projeto será realizada para garantir que o ambiente de dese
 - Chart.js (visualizações)
 - HTML5/CSS3 (interface)
 
-🚀 Otimizações na Migração de Dados
-Implementamos uma estratégia avançada de migração de dados SQLite → PostgreSQL com ganhos de até 40x de performance em relação a métodos convencionais. Principais melhorias:
+🚀 ## Otimizações na Migração de Dados
+Foi implementado uma estratégia avançada de migração de dados SQLite → PostgreSQL com ganhos de até 40x de performance em relação a métodos convencionais.
 
-🔑 Principais Otimizações
-Técnica	Benefício	Impacto
-COPY em massa	Substituição de INSERTs sequenciais pelo comando COPY nativo do PostgreSQL	Redução de 92% no tempo de carga
-Processamento paralelo	Migração simultânea de tabelas com ThreadPoolExecutor (4 workers)	Ganho de 300% em throughput
-Gerenciamento de índices	Remoção temporária + reconstrução pós-carga	Aceleração em 65% nas operações de escrita
-Transações otimizadas	Configuração synchronous_commit = off durante a migração	Redução de 85% em I/O disk
-Batch processing	Leitura/escrita em blocos de 5.000 registros	Uso de memória 70% menor
-CSV intermediário	Transferência via arquivos CSV temporários	Eliminação de overhead de parsing
+🔑 ## Principais Otimizações
+| Técnica				  | Benefício																   |Impacto										|
+|-------------------------|----------------------------------------------------------------------------|--------------------------------------------|
+| COPY em massa			  | Substituição de INSERTs sequenciais pelo                                   |Redução de 92% no tempo de carga            |
+|						  | comando COPY nativo do PostgreSQL	                                       |                                            |
+| Processamento paralelo  | Migração simultânea de tabelas com ThreadPoolExecutor (4 workers)		   |Ganho de 300% em throughput                 |
+| Gerenciamento de índices| Remoção temporária + reconstrução pós-carga							       |Aceleração em 65% nas operações de escrita  |
+| Transações otimizadas	  | Configuração synchronous_commit = off durante a migração				   |Redução de 85% em I/O disk                  |
+| Batch processing		  | Leitura/escrita em blocos de 5.000 registros							   |Uso de memória 70% menor                    |
+| CSV intermediário		  | Transferência via arquivos CSV temporários								   |Eliminação de overhead de parsing           |
 ⚙️ Detalhes Técnicos
 
 Principais tecnologias utilizadas:
