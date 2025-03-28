@@ -161,23 +161,21 @@ Principais tecnologias utilizadas:
 |Memória utilizada	 |450MB	  |120MB	 |-73%    |
 |IOPS de disco	       |2200	  |350	 |-84%    |
 
-📦 Fluxo Otimizado
+📦 #Fluxo Otimizado
 
 graph TD
-    A[SQLite] --> B{Extração paralela}
-    B -->|CSV batches| C[PostgreSQL COPY]
-    C --> D[Índices temporários]
-    D --> E[Reconstrução de índices]
-    E --> F[Dados agregados]
-    F --> G[Commit final]
-✅ Benefícios Adicionais
-Atomicidade: Rollback automático em caso de falha
+ -   A[SQLite] --> B{Extração paralela}
+ -   B -->|CSV batches| C[PostgreSQL COPY]
+ -   C --> D[Índices temporários]
+ -   D --> E[Reconstrução de índices]
+ -   E --> F[Dados agregados]
+ -   F --> G[Commit final]
+-    ✅ Benefícios Adicionais
 
-Resiliência: Retentativas automáticas para deadlocks
-
-Controle: Estimativa precisa de tempo restante
-
-Segurança: Validação prévia de integridade dos dados
+- Atomicidade: Rollback automático em caso de falha
+- Resiliência: Retentativas automáticas para deadlocks
+- Controle: Estimativa precisa de tempo restante
+- Segurança: Validação prévia de integridade dos dados
 
 Esta solução é capaz de processar >15,000 registros/segundo em hardware médio, garantindo migrações rápidas e seguras mesmo para bases de dados grandes.
 
