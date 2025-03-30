@@ -18,7 +18,6 @@ from config.settings import DB_CONFIG_SQLITE, DB_CONFIG_POSTGRES
 from app import routes
 import traceback
 from psycopg2.extras import execute_batch
-import psutil
 from concurrent.futures import ThreadPoolExecutor
 
 # Configurações de URL e diretórios
@@ -779,7 +778,7 @@ def handle_visualization_choice(choice):
         print("\nIniciando dashboard...")
         try:
             subprocess.Popen([sys.executable, "-m", "app.routes"])
-            webbrowser.open("http://localhost:5000/")
+            webbrowser.open("http://127.0.0.1:5000/")
         except Exception as e:
             print(f"Erro ao iniciar dashboard: {str(e)}")
     print("\nO dashboard foi aberto em seu navegador. Você pode continuar usando o terminal.")
