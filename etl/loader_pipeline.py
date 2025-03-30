@@ -105,6 +105,10 @@ def get_postgres_connection():
         return conn
     except psycopg2.Error as e:
         print(f"Erro ao conectar ao PostgreSQL: {e}")
+        print("\n❌ ERRO DE CONEXÃO COM O POSTGRESQL:")
+        print(f"Mensagem original: {str(e)}")
+        print("\nPOR FAVOR VERIFIQUE:")
+        print(f"Arquivo de configuração: config/settings.py")
         return None
 
 def create_postgres_schema(conn):
@@ -781,7 +785,11 @@ def handle_visualization_choice(choice):
             webbrowser.open("http://127.0.0.1:5000/")
         except Exception as e:
             print(f"Erro ao iniciar dashboard: {str(e)}")
-    print("\nO dashboard foi aberto em seu navegador. Você pode continuar usando o terminal.")
+        print("\nO dashboard foi aberto em seu navegador. Você pode continuar usando o terminal.")
+    else:
+        print("\nOK! O usuário não deseja visualizar no momento.")
+    
+
 
 def is_file_processed(conn, file_name):
     """Verifica se o arquivo já foi processado"""
@@ -986,9 +994,87 @@ def validate_environment():
         if not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
 
+def run_full_pipeline():
+    """Executa todo o fluxo automaticamente"""
+    while True:
+        # Verificar conexão com PostgreSQL
+        if not check_postgres_connection():
+            print("Verifique as configurações do PostgreSQL e tente novamente.")
+            return
+        conn = get_sqlite_connection()
+        create_sqlite_schema(conn)
+        
+        try:
+            remote_files = get_remote_files()
+        except Exception as e:
+            print(f"Erro ao obter arquivos remotos: {str(e)}")
+            conn.close()
+            continue
+
+        if remote_files is None:
+            print("Não foi possível verificar arquivos remotos. Verifique sua conexão.")
+            conn.close()
+            continue
+            
+        files_to_process = [name for name in remote_files if not is_file_processed(conn, name)]
+        
+        if not files_to_process:
+            conn.close()
+            while True:  # Submenu interativo
+                print("\nEscolha uma opção:")
+                print("  V - Visualizar dados no dashboard")
+                print("  M - Migração (todos os registros e tabelas com dados agregados)")
+                print("  N - Sair do programa")
+                choice = input("Digite sua escolha (V/M/N): ").strip().upper()
+
+                if choice == 'V':
+                    handle_visualization_choice('V')
+                elif choice == 'M':
+                    handle_migration_choice('M')
+                elif choice == 'N':
+                    print("\nEncerrando programa...")
+                    return
+                else:
+                    print("Opção inválida. Tente novamente.")
+                
+                input("\nPressione Enter para continuar...")
+                os.system('cls' if os.name == 'nt' else 'clear')  # Limpa a tela
+                
+        else:
+            current_time = datetime.now().strftime("%Y%m%d_Hs%H-%M")
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+            process_dir = os.path.join(base_dir, 'data', f'data_process_{current_time}')
+            os.makedirs(process_dir, exist_ok=True)
+            LOCAL_DATA_DIR = process_dir
+            conn.close()
+
+            download_thread = threading.Thread(target=download_files)
+            process_thread = threading.Thread(target=process_files)
+            
+            download_thread.start()
+            process_thread.start()
+            
+            download_thread.join()
+            process_thread.join()
+
+            while True:
+                visualization_choice = input("\nDeseja visualizar os dados agora? (V/N) ").strip().upper()
+                if visualization_choice in ('V', 'N'):
+                    break
+                print("Opção inválida. Digite V para visualizar ou N para sair.")
+            
+            handle_visualization_choice(visualization_choice)
+            input("\nPressione Enter para voltar ao menu principal...")
+            os.system('cls' if os.name == 'nt' else 'clear')                  
+
 def main():
     global LOCAL_DATA_DIR
     validate_environment()
+
+    # Modo automático para Docker
+    #if os.environ.get('DOCKER_MODE') == 'false':
+    #    print("\nModo Docker: Executando fluxo automático...")
+    #    run_full_pipeline()
 
     while True:
         # Verificar conexão com PostgreSQL
@@ -1032,8 +1118,7 @@ def main():
                     print("Opção inválida. Tente novamente.")
                 
                 input("\nPressione Enter para continuar...")
-                #os.system('cls' if os.name == 'nt' else 'clear')
-                #os.system('cls' if os.name == 'nt' else 'clear')  # Limpa a tela
+                os.system('cls' if os.name == 'nt' else 'clear')  # Limpa a tela
                 
         else:
             current_time = datetime.now().strftime("%Y%m%d_Hs%H-%M")
