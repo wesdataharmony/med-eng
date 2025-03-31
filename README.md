@@ -1,7 +1,22 @@
 # Medical Dashboard - FHIR Data Analysis
 Solução para processamento e visualização de dados médicos no padrão FHIR
 
-## ⚠️ Arquivo "docker-compose.yml" não implementado
+## ⚠️ Arquivo "docker-compose.yml", implementado
+## Descrição do Uso do python -m etl.loader_pipeline
+O comando "python -m etl.loader_pipeline" é responsável por executar o pipeline de 
+ETL (Extract, Transform, Load) e migrar dados do SQLite para o PostgreSQL. Ele inclui funcionalidades de:
+
+- Download dos arquivos e coleta de dados de um repositório remoto (GitHub)
+- Processamento de arquivos JSON para estruturar os dados
+- Armazenamento temporário no SQLite
+- Migração para o PostgreSQL com otimizações de desempenho
+- Dashboard interativo para visualização dos dados.
+  
+## Para usar o python -m etl.loader_pipeline corretamente e usuar a migração:
+- Configure o settings.py com os dados do PostgreSQL.
+- Suba o PostgreSQL via Docker: docker-compose up -d postgres.
+- Execute o ETL python -m etl.loader_pipeline após o PostgreSQL estar pronto.
+
 ## Futuras Melhorias e Implementações:
 ## ⚠️ Processamento de Dados com Apache Spark
 O processamento dos dados será aprimorado utilizando Apache Spark, permitindo o processamento em larga escala de grandes volumes de dados de maneira distribuída. Com o uso de Spark, será possível otimizar o tempo de processamento e garantir maior eficiência, especialmente ao lidar com conjuntos de dados mais complexos.
