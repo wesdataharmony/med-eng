@@ -2,7 +2,7 @@
 Solução para processamento e visualização de dados médicos no padrão FHIR
 
 ## ⚠️ Arquivo "docker-compose.yml", implementado
-## Descrição do Uso do python -m etl.loader_pipeline
+## Descrição do Uso do "python -m etl.loader_pipeline"
 O comando "python -m etl.loader_pipeline" é responsável por executar o pipeline de 
 ETL (Extract, Transform, Load) e migrar dados do SQLite para o PostgreSQL. Ele inclui funcionalidades de:
 
@@ -12,7 +12,7 @@ ETL (Extract, Transform, Load) e migrar dados do SQLite para o PostgreSQL. Ele i
 - Migração para o PostgreSQL com otimizações de desempenho
 - Dashboard interativo para visualização dos dados.
   
-## Para usar o python -m etl.loader_pipeline corretamente e usuar a migração:
+## Para usar o "python -m etl.loader_pipeline" corretamente e usuar a migração:
 - Configure o settings.py com os dados do PostgreSQL.
 - Suba o PostgreSQL via Docker: docker-compose up -d postgres.
 - Execute o ETL python -m etl.loader_pipeline após o PostgreSQL estar pronto.
