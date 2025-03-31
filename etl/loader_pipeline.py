@@ -108,7 +108,7 @@ def get_postgres_connection():
         print("\n❌ ERRO DE CONEXÃO COM O POSTGRESQL:")
         print(f"Mensagem original: {str(e)}")
         print("\nPOR FAVOR VERIFIQUE:")
-        print(f"Arquivo de configuração: config/settings.py")
+        print(f"\nArquivo de configuração: config/settings.py")
         return None
 
 def create_postgres_schema(conn):
@@ -1071,16 +1071,8 @@ def main():
     global LOCAL_DATA_DIR
     validate_environment()
 
-    # Modo automático para Docker
-    #if os.environ.get('DOCKER_MODE') == 'false':
-    #    print("\nModo Docker: Executando fluxo automático...")
-    #    run_full_pipeline()
-
     while True:
-        # Verificar conexão com PostgreSQL
-        if not check_postgres_connection():
-            print("Verifique as configurações do PostgreSQL e tente novamente.")
-            return
+        # Conectar ao SQLite sem verificar PostgreSQL
         conn = get_sqlite_connection()
         create_sqlite_schema(conn)
         
