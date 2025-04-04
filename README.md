@@ -144,10 +144,10 @@ A dockerização do projeto será realizada para garantir que o ambiente de dese
 - Chart.js (visualizações)
 - HTML5/CSS3 (interface)
 
-🚀 ## Otimizações na Migração de Dados
+## 🚀 ## Otimizações na Migração de Dados
 Foi implementado uma estratégia avançada de migração de dados SQLite → PostgreSQL com ganhos de até 40x de performance em relação a métodos convencionais.
 
-🔑 ## Principais Otimizações
+## 🔑 Principais Otimizações
 | Técnica				     | Benefício																   |Impacto				|
 |-------------------------|----------------------------------------------------------------------------|--------------------------------------------|
 | COPY em massa			  | Substituição de INSERTs sequenciais pelo                                   |Redução de 92% no tempo de carga            |
@@ -159,7 +159,7 @@ Foi implementado uma estratégia avançada de migração de dados SQLite → Pos
 | CSV intermediário		  | Transferência via arquivos CSV temporários								   |Eliminação de overhead de parsing           |
 
 
-⚙️ ## Detalhes Técnicos
+## ⚙️ Detalhes Técnicos
 Principais tecnologias utilizadas:
 - PostgreSQL COPY Protocol
 - ThreadPoolExecutor (concorrência)
@@ -167,7 +167,7 @@ Principais tecnologias utilizadas:
 - CSV memory mapping
 - Adaptive batch sizing
 - 
-📈 ## Métricas de Performance
+## 📈 Métricas de Performance
 
 |Métrica    		  |	Antes	|Depois	|Melhoria|
 |---------------------|---------|-------|--------|
@@ -176,7 +176,7 @@ Principais tecnologias utilizadas:
 |Memória utilizada	 |450MB	  |120MB	 |-73%    |
 |IOPS de disco	       |2200	  |350	 |-84%    |
 
-📦 #Fluxo Otimizado
+## 📦 Fluxo Otimizado
  -   A[SQLite] --> B{Extração paralela}
  -   B --> CSV batches| C[PostgreSQL COPY]
  -   C --> D [Índices temporários]
